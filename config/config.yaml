@@ -1,0 +1,12 @@
+api:
+  base_url: "https://api.example.com/v1"
+  timeout: 30
+
+# 环境变量配置说明
+env_vars:
+  - API_TOKEN: "您的API令牌"
+
+email:
+  smtp_server: "smtp.example.com"
+  smtp_port: 587
+  use_tls: true 

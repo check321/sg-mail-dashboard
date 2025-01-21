@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  mail-dashboard:
+    build: .
+    container_name: mail-dashboard
+    ports:
+      - "7860:7860"
+    volumes:
+      - ./config:/app/config
+    restart: unless-stopped 

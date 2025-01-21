@@ -1,31 +1,21 @@
 import gradio as gr
 from services.email_service import EmailService
-import json
-import os
 
 def create_app():
-    # 加载认证信息
-    def load_auth():
-        auth_path = os.path.join('config', 'auth.json')
-        try:
-            with open(auth_path, 'r', encoding='utf-8') as f:
-                auth_data = json.load(f)
-                return auth_data.get('ui_auth', {})
-        except Exception as e:
-            print(f"加载认证配置失败: {str(e)}")
-            return {}
-    
-    # 获取认证信息
-    ui_auth = load_auth()
     email_service = EmailService()
     
     def list_addresses():
-        """获取邮件列表，并添加删除按钮"""
+        """
+        获取邮件列表，并在最后一列直接存储该邮箱的ID，用于删除操作
+        """
         addresses = email_service.list_email_addresses()
-        # 为每行添加删除按钮
         for row in addresses:
-            if len(row) >= 1:  # 确保行数据有效
-                row.append("🗑️")  # 使用删除图标
+            if len(row) >= 1:
+                # 给最后一列写入 "图标+ID" 的格式
+                # 例如 原来 row = [123, "test@example.com", ...]
+                # 加入后 row = [123, "test@example.com", ..., "🗑️|123"]
+                record_id = row[0]
+                row.append(f"🗑️|{record_id}")
         return addresses
     
     def generate_password():
@@ -33,28 +23,18 @@ def create_app():
         return email_service.generate_simple_password()
     
     def delete_address(evt: gr.SelectData):
-        """删除邮件地址"""
+        """删除邮件地址（仅基于ID，不使用行索引）"""
         try:
-            # 获取点击的行和列索引
-            row_index = evt.index[0]    # 行索引
-            col_index = evt.index[1]    # 列索引
+            # 获取点击的列索引
+            col_index = evt.index[1]  # （evt.index[0] 为行索引，这里不再使用）
             
-            if col_index == 6:  # 点击删除按钮列（索引从0开始）
-                # 从当前数据表中获取完整的行数据
-                current_data = email_list.value
-                if not current_data or row_index >= len(current_data):
-                    raise Exception("无法获取行数据")
-                
-                row_data = current_data[row_index]
-                if not row_data or len(row_data) < 1:
-                    raise Exception("行数据无效")
-                
-                email_id = str(row_data[0])  # 获取ID（第一列）
-                if not email_id.isdigit():
-                    raise Exception(f"无效的邮件ID: {email_id}")
-                
-                print(f"正在删除邮件ID: {email_id}")
-                print(f"完整行数据: {row_data}")
+            if col_index == 6:  # 点击最后一列（索引从0开始）
+                # evt.value 形如 "🗑️|123"
+                cell_data = str(evt.value)
+                if "|" not in cell_data:
+                    raise Exception("无法解析ID：单元格中无"|"分隔符")
+                email_id = cell_data.split("|", 1)[1]  # 去掉"��️|"
+                print(f"解析到的邮件ID: {email_id}")
                 
                 result = email_service.delete_email_address(email_id)
                 if "成功" in result:
@@ -62,12 +42,13 @@ def create_app():
                     updated_list = list_addresses()
                     return result, updated_list
                 return result, None
-            return None, None  # 点击其他列不触发删除
+            
+            # 如果不是最后一列，则不触发删除
+            return None, None
+        
         except Exception as e:
             print(f"删除操作出错: {str(e)}")
             print(f"事件数据: index={evt.index}, value={evt.value}")
-            if hasattr(email_list, 'value'):
-                print(f"当前表格数据: {email_list.value}")
             return f"删除操作出错: {str(e)}", None
     
     def add_address(username, password):
@@ -84,12 +65,6 @@ def create_app():
         if "成功" in result:
             return result, list_addresses()
         return result, None
-    
-    # 准备认证信息
-    auth_creds = None
-    if ui_auth.get('username') and ui_auth.get('password'):
-        print("启用身份验证...")
-        auth_creds = (ui_auth['username'], ui_auth['password'])
     
     demo = gr.Blocks(
         title="邮件地址管理面板",
@@ -110,9 +85,6 @@ def create_app():
             }
         """
     )
-    
-    if auth_creds:
-        demo.auth = auth_creds
     
     with demo:
         with gr.Row():
